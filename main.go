@@ -2,10 +2,10 @@
 package main
 
 import (
-	//	"fmt"
+	"fmt"
 	//	"html/template"
-	//"log"
-	//	"net/http"
+	"log"
+	"net/http"
 	//"encoding/json"
 	//	"io"
 	"os"
@@ -20,7 +20,7 @@ type WebServerSettings struct {
 	data_path    string
 }
 
-var ws_settings = WebServerSettings{}
+var ws_settings = &WebServerSettings{}
 
 func initWebServerSettings(path string) *WebServerSettings {
 	return &WebServerSettings{rootWWW_path: path}
@@ -54,7 +54,7 @@ func (s *WebServerSettings) getDataPath() string {
 	return s.data_path
 }
 
-func getAllFilesFromDir(path string) ([]string, error) {
+func __getAllFSFromDir(path string, isdirectory bool) ([]string, error) {
 	var files []string
 
 	f, err := os.Open(path)
@@ -69,12 +69,20 @@ func getAllFilesFromDir(path string) ([]string, error) {
 	}
 
 	for _, file := range files_attr {
-		if file.IsDir() == false {
+		if file.IsDir() == isdirectory {
 			files = append(files, path+file.Name())
 		}
 	}
 
 	return files, nil
+}
+
+func getAllFilesFromDir(path string) ([]string, error) {
+	return __getAllFSFromDir(path, false)
+}
+
+func getAllSubDirFromDir(path string) ([]string, error) {
+	return __getAllFSFromDir(path, true)
 }
 
 const (
@@ -122,10 +130,28 @@ func getData(typeofdata int, namedata string) ([]byte, error) {
 	return data, nil
 }
 
+func WWWRoot(w http.ResponseWriter, r *http.Request) {
+	subdir, err := getAllSubDirFromDir(ws_settings.getDataPath())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	lenpath := len(ws_settings.getDataPath())
+	for _, s := range subdir {
+		fmt.Fprintln(w, s)
+		title, _ := getData(GET_DATA, s[lenpath:]+"/title.txt")
+		fmt.Fprintln(w, string(title))
+	}
+}
+
 func main() {
-	ws_settings := initWebServerSettings("/home/break/go/src/www/")
+	ws_settings = initWebServerSettings("/home/break/go/src/www/")
 	ws_settings.setTmplPath("tmpl/")
 	ws_settings.setCssPath("css/")
+	ws_settings.setDataPath("data/")
+
+	http.HandleFunc("/", WWWRoot)
+	log.Println("Listening on 8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 
 	/*
 		template_files, err := getAllFilesFromDir(ws_settings.getTmplPath())
